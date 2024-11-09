@@ -66,6 +66,7 @@ jobs:
           cd build/
           ./compile.sh build BOARD=${{ matrix.BOARD }} BRANCH=${{ env.BRANCH }} RELEASE=${{ matrix.RELEASE }} BUILD_MINIMAL=${BUILD_MINIMAL} BUILD_DESKTOP=${BUILD_DESKTOP} \
             COMPRESS_OUTPUTIMAGE=xz KERNEL_CONFIGURE=no
+          sudo rm *.txt -rf
 
       - name: Generate qcow2 and vmdk
         if: env.changes == 'yes' && (matrix.BOARD == 'uefi-x86' || matrix.BOARD == 'uefi-arm64')
@@ -78,7 +79,7 @@ jobs:
           sudo qemu-img convert -f raw -O vmdk ${filename}.img ${filename}.vmdk
           sudo xz -T 0 -1 -v ${filename}.qcow2
           sudo xz -T 0 -1 -v ${filename}.vmdk
-          sudo rm *.img *.txt && du -hs *
+          sudo rm *.img -rf
 
       - name: Upload image to Release
         if: env.changes == 'yes'
