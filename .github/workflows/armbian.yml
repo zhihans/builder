@@ -1,0 +1,102 @@
+name: Build-Armbian
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+env:
+  TZ: "Asia/Shanghai"
+  BUILD_DESKTOP: "no"
+  BUILD_MINIMAL: "yes"
+
+
+jobs:
+  build-armbian:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        RELEASE:
+          - bookworm
+          - noble
+          - sid
+        BOARD:
+          - orangepi5-plus
+          - radxa-e20c
+          - aml-s9xx-box
+          - onecloud
+          - uefi-x86
+          - uefi-arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check updates
+        run: |
+          sudo timedatectl set-timezone "${TZ}"
+          git ls-remote https://github.com/armbian/build.git main | awk {'print $1'} > hash
+          if [ -n "$(git status --porcelain)" ]; then
+              echo "changes=yes" >> $GITHUB_ENV
+          else
+              echo "changes=no" >> $GITHUB_ENV
+              [ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ] && echo "changes=yes" >> $GITHUB_ENV || exit 0
+          fi
+
+      - name: Find available branches
+        if: env.changes == 'yes'
+        run: |
+          git clone --depth=1 https://github.com/armbian/build.git build
+          board_filename=$(ls build/config/boards/${{ matrix.BOARD }}.*) && echo $board_filename
+          if grep 'KERNEL_TARGET' $board_filename | grep -q 'edge'; then
+              echo "包含关键字 'edge'" && echo "BRANCH=edge" >> $GITHUB_ENV
+          elif grep 'KERNEL_TARGET' $board_filename | grep -q 'current'; then
+              echo "包含关键字 'current'" && echo "BRANCH=current" >> $GITHUB_ENV
+          elif grep 'KERNEL_TARGET' $board_filename | grep -q 'vendor'; then
+              echo "包含关键字 'vendor'" && echo "BRANCH=vendor" >> $GITHUB_ENV
+          else
+              echo "不包含 'edge', 'current' 或 'vendor'"
+              exit 1
+          fi
+
+      - name: Compile Armbian [ ${{ matrix.BOARD }} ${{ matrix.RELEASE }} ${{ env.BRANCH }} ]
+        if: env.changes == 'yes'
+        run: |
+          cd build/
+          ./compile.sh build BOARD=${{ matrix.BOARD }} BRANCH=${{ env.BRANCH }} RELEASE=${{ matrix.RELEASE }} BUILD_MINIMAL=${BUILD_MINIMAL} BUILD_DESKTOP=${BUILD_DESKTOP} \
+            COMPRESS_OUTPUTIMAGE=xz KERNEL_CONFIGURE=no
+
+      - name: Generate qcow2 and vmdk
+        if: env.changes == 'yes' && (matrix.BOARD == 'uefi-x86' || matrix.BOARD == 'uefi-arm64')
+        run: |
+          cd build/output/images/
+          filename=$(basename *.img.xz .img.xz)
+          sudo xz -T 0 -dv -k ${filename}.img.xz
+          sudo apt-get update && sudo apt-get install -y qemu-utils
+          sudo qemu-img convert -f raw -O qcow2 ${filename}.img ${filename}.qcow2
+          sudo qemu-img convert -f raw -O vmdk ${filename}.img ${filename}.vmdk
+          sudo xz -T 0 -1 -v ${filename}.qcow2
+          sudo xz -T 0 -1 -v ${filename}.vmdk
+
+      - name: Upload image to Release
+        if: env.changes == 'yes'
+        uses: ncipollo/release-action@main
+        with:
+          tag: "Armbian-${{ matrix.RELEASE }}"
+          artifacts: "build/output/images/*.xz"
+          allowUpdates: true
+
+      - name: Force Push hash
+        if: env.changes == 'yes'
+        run: |
+              sudo rm build/ -rf
+              # 强制推送
+              git config --local user.name "github-actions[bot]"
+              git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git checkout --orphan latest_branch
+              git add -A
+              git commit -am "$(TZ=Asia/Shanghai date +"%Y-%m-%d %H:%M:%S")"
+              git branch -D main
+              git branch -m main
+              git push -f "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" main
