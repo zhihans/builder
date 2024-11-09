@@ -1,0 +1,84 @@
+name: Generate-rootfs
+
+on:
+  schedule:
+    - cron: "30 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  Generate-debian:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        release:
+          - bookworm
+          - sid
+        arch:
+          - amd64
+          - arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up debootstrap environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debootstrap xz-utils
+  
+      - name: Build Debian ${{ matrix.release }} rootfs for ${{ matrix.arch }}
+        run: |
+          sudo mkdir -p rootfs/
+          sudo debootstrap --arch ${{ matrix.arch }} ${{ matrix.release }} rootfs/ http://deb.debian.org/debian
+
+      - name: Compress rootfs to tar.xz
+        run: |
+          sudo tar -c -C rootfs/ . | sudo xz -T 0 -1 -v > debian-${{ matrix.release }}-${{ matrix.arch }}.tar.xz
+          
+      - name: Upload image to Release
+        uses: ncipollo/release-action@main
+        with:
+          tag: "rootfs"
+          artifacts: "*.xz"
+          allowUpdates: true
+
+  Generate-ubuntu:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        release:
+          - noble
+        arch:
+          - amd64
+          - arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up debootstrap environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debootstrap xz-utils
+  
+      - name: Build Debian ${{ matrix.release }} rootfs for ${{ matrix.arch }}
+        run: |
+          sudo mkdir -p rootfs/
+          if [ "${{ matrix.arch }}" == "amd64" ]; then
+              sudo debootstrap --arch ${{ matrix.arch }} ${{ matrix.release }} rootfs/ http://archive.ubuntu.com/ubuntu
+          elif [ "${{ matrix.arch }}" == "arm64" ]; then
+              sudo debootstrap --arch ${{ matrix.arch }} ${{ matrix.release }} rootfs/ http://ports.ubuntu.com/
+          fi          
+
+      - name: Compress rootfs to tar.xz
+        run: |
+          sudo tar -c -C rootfs/ . | sudo xz -T 0 -1 -v > ubuntu-${{ matrix.release }}-${{ matrix.arch }}.tar.xz
+          
+      - name: Upload image to Release
+        uses: ncipollo/release-action@main
+        with:
+          tag: "rootfs"
+          artifacts: "*.xz"
+          allowUpdates: true          
