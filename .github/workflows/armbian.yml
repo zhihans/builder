@@ -21,7 +21,9 @@ jobs:
         RELEASE:
           - bookworm
           - noble
+          - sid
         BOARD:
+          - orangepi5-plus
           - radxa-e20c
           - aml-s9xx-box
           - onecloud
@@ -76,7 +78,7 @@ jobs:
           sudo qemu-img convert -f raw -O vmdk ${filename}.img ${filename}.vmdk
           sudo xz -T 0 -1 -v ${filename}.qcow2
           sudo xz -T 0 -1 -v ${filename}.vmdk
-          sudo rm ${filename}.img && du -hs *
+          sudo rm *.img *.txt && du -hs *
 
       - name: Upload image to Release
         if: env.changes == 'yes'
