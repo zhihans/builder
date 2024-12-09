@@ -25,17 +25,17 @@ jobs:
 
     - name: Fetch and delete armbian releases
       run: |
-        # 列出所有 releases，以 "armbian-" 开头的逐个删除
-        gh release list --repo "${{ github.repository }}" | awk '$1 ~ /^armbian-/ { print $1 }' | while read TAG; do
+        # 列出所有 releases，以 "Armbian-" 开头的逐个删除
+        gh release list --repo "${{ github.repository }}" | awk '$1 ~ /^Armbian-/ { print $1 }' | while read TAG; do
           echo "Deleting release: $TAG"
           gh release delete "$TAG" --repo "${{ github.repository }}" --yes
         done
 
     - name: Delete associated tags
       run: |
-        # 获取以 "armbian-" 开头的所有标签
+        # 获取以 "Armbian-" 开头的所有标签
         git fetch --tags
-        git tag -l "armbian-*" | while read TAG; do
+        git tag -l "Armbian-*" | while read TAG; do
           echo "Deleting tag: $TAG"
           git push --delete origin "$TAG"
         done
