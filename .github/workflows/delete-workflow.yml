@@ -25,7 +25,7 @@ jobs:
 
     - name: Fetch and delete workflow runs
       run: |
-        gh run list --repo "${{ github.repository }}" --limit 1000 --json databaseId  -q '.[].databaseId' | while read RUN_ID; do
+        gh run list --repo "${{ github.repository }}" --status completed --limit 1000 --json databaseId  -q '.[].databaseId' | while read RUN_ID; do
           echo "Deleting workflow run: $RUN_ID"
           gh run delete "$RUN_ID" --repo "${{ github.repository }}"
         done
