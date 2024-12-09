@@ -25,8 +25,8 @@ jobs:
 
     - name: Fetch and delete workflow runs
       run: |
-        # 获取所有 workflow 运行记录并删除
+        # 列出所有运行记录，排除 "in_progress" 的运行
         gh run list --repo "${{ github.repository }}" --limit 100 | awk '{print $1}' | while read RUN_ID; do
           echo "Deleting workflow run: $RUN_ID"
-          gh run delete "$RUN_ID" --repo "${{ github.repository }}" --confirm
+          gh run delete "$RUN_ID" --repo "${{ github.repository }}" -y
         done
