@@ -1,0 +1,41 @@
+name: Delete Armbian Releases
+
+on:
+  schedule:
+    - cron: "0 0 */7 * *" # 每 7 天执行一次
+  workflow_dispatch: # 手动触发
+
+jobs:
+  delete-armbian-releases:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install GitHub CLI
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gh
+
+    - name: Authenticate with GitHub CLI
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+
+    - name: Fetch and delete armbian releases
+      run: |
+        # 列出所有 releases，以 "Armbian-" 开头的逐个删除
+        gh release list --repo "${{ github.repository }}" | awk '$1 ~ /^Armbian-/ { print $1 }' | while read TAG; do
+          echo "Deleting release: $TAG"
+          gh release delete "$TAG" --repo "${{ github.repository }}" --yes
+        done
+
+    - name: Delete associated tags
+      run: |
+        # 获取以 "Armbian-" 开头的所有标签
+        git fetch --tags
+        git tag -l "Armbian-*" | while read TAG; do
+          echo "Deleting tag: $TAG"
+          git push --delete origin "$TAG"
+        done
