@@ -1,0 +1,103 @@
+name: Generate-rootfs
+
+on:
+  schedule:
+    - cron: "30 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  Generate-debian:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        release:
+          - bookworm
+          - sid
+        arch:
+          - amd64
+          - arm64
+    steps:
+      - name: Set up debootstrap environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debootstrap xz-utils qemu-user-static
+
+      - name: Build Debian ${{ matrix.release }} rootfs for ${{ matrix.arch }}
+        run: |
+          sudo mkdir -p rootfs/
+          sudo debootstrap --arch ${{ matrix.arch }} ${{ matrix.release }} rootfs/ http://deb.debian.org/debian/
+          if [ "${{ matrix.release }}" == "sid" ]; then
+              sudo tee rootfs/etc/apt/sources.list > /dev/null <<EOF
+          deb http://mirrors.cernet.edu.cn/debian/ ${{ matrix.release }} main contrib non-free non-free-firmware
+          EOF
+          else
+              sudo tee rootfs/etc/apt/sources.list > /dev/null <<EOF
+          deb http://mirrors.cernet.edu.cn/debian/ ${{ matrix.release }} main contrib non-free non-free-firmware
+          deb http://mirrors.cernet.edu.cn/debian/ ${{ matrix.release }}-updates main contrib non-free non-free-firmware
+          deb http://mirrors.cernet.edu.cn/debian/ ${{ matrix.release }}-backports main contrib non-free non-free-firmware
+          deb http://mirrors.cernet.edu.cn/debian-security ${{ matrix.release }}-security main contrib non-free non-free-firmware
+          EOF
+          fi
+
+      - name: Compress rootfs to tar.xz
+        run: |
+          sudo tar -c -C rootfs/ . | sudo xz -T 0 -1 -v > debian-${{ matrix.release }}-${{ matrix.arch }}.tar.xz
+
+      - name: Upload image to Release
+        uses: ncipollo/release-action@main
+        with:
+          tag: "rootfs"
+          artifacts: "*.xz"
+          allowUpdates: true
+
+  Generate-ubuntu:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        release:
+          - noble
+        arch:
+          - amd64
+          - arm64
+    steps:
+      - name: Set up debootstrap environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debootstrap xz-utils qemu-user-static
+
+      - name: Build Ubuntu ${{ matrix.release }} rootfs for ${{ matrix.arch }}
+        run: |
+          sudo mkdir -p rootfs/
+          if [ "${{ matrix.arch }}" == "amd64" ]; then
+              sudo debootstrap --arch ${{ matrix.arch }} ${{ matrix.release }} rootfs/ http://archive.ubuntu.com/ubuntu/
+              sudo tee rootfs/etc/apt/sources.list > /dev/null <<EOF
+          deb http://mirrors.cernet.edu.cn/ubuntu/ ${{ matrix.release }} main restricted universe multiverse
+          deb http://mirrors.cernet.edu.cn/ubuntu/ ${{ matrix.release }}-updates main restricted universe multiverse
+          deb http://mirrors.cernet.edu.cn/ubuntu/ ${{ matrix.release }}-backports main restricted universe multiverse
+          deb http://mirrors.cernet.edu.cn/ubuntu/ ${{ matrix.release }}-security main restricted universe multiverse
+          EOF
+          elif [ "${{ matrix.arch }}" == "arm64" ]; then
+              sudo debootstrap --arch ${{ matrix.arch }} ${{ matrix.release }} rootfs/ http://ports.ubuntu.com/
+              sudo tee rootfs/etc/apt/sources.list > /dev/null <<EOF
+          deb http://mirrors.cernet.edu.cn/ubuntu-ports/ ${{ matrix.release }} main restricted universe multiverse
+          deb http://mirrors.cernet.edu.cn/ubuntu-ports/ ${{ matrix.release }}-updates main restricted universe multiverse
+          deb http://mirrors.cernet.edu.cn/ubuntu-ports/ ${{ matrix.release }}-backports main restricted universe multiverse
+          deb http://mirrors.cernet.edu.cn/ubuntu-ports/ ${{ matrix.release }}-security main restricted universe multiverse
+          EOF
+          fi
+
+
+      - name: Compress rootfs to tar.xz
+        run: |
+          sudo tar -c -C rootfs/ . | sudo xz -T 0 -1 -v > ubuntu-${{ matrix.release }}-${{ matrix.arch }}.tar.xz
+
+      - name: Upload image to Release
+        uses: ncipollo/release-action@main
+        with:
+          tag: "rootfs"
+          artifacts: "*.xz"
+          allowUpdates: true
